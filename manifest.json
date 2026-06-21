@@ -2,7 +2,7 @@
   "name": "Салих — Исламский помощник",
   "short_name": "Салих",
   "description": "Времена намазов, азкары, календарь, пост и вирд",
-  "start_url": "/index.html",
+  "start_url": "/muslimapp/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#0f1a0f",
@@ -58,25 +58,44 @@
       "purpose": "any maskable"
     }
   ],
-  "categories": ["lifestyle", "utilities"],
+  "categories": [
+    "lifestyle",
+    "utilities"
+  ],
   "shortcuts": [
     {
       "name": "Намазы",
       "short_name": "Намазы",
-      "url": "/index.html#prayers",
-      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+      "url": "/muslimapp/#prayers",
+      "icons": [
+        {
+          "src": "icons/icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
     },
     {
       "name": "Азкары",
       "short_name": "Азкары",
-      "url": "/index.html#adhkar",
-      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+      "url": "/muslimapp/#adhkar",
+      "icons": [
+        {
+          "src": "icons/icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
     },
     {
       "name": "Пост",
       "short_name": "Пост",
-      "url": "/index.html#fast",
-      "icons": [{ "src": "icons/icon-96.png", "sizes": "96x96" }]
+      "url": "/muslimapp/#fast",
+      "icons": [
+        {
+          "src": "icons/icon-96.png",
+          "sizes": "96x96"
+        }
+      ]
     }
-  ]
+  ],
+  "scope": "/muslimapp/"
 }

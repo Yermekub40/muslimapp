@@ -4,11 +4,11 @@
 // ═══════════════════════════════════════════
 
 const CACHE_NAME = 'salih-v1';
-const OFFLINE_URL = '/index.html';
+const OFFLINE_URL = '/muslimapp/';
 
 // Файлы для кэширования при установке
 const PRECACHE_URLS = [
-  '/index.html',
+  '/muslimapp/',
   '/manifest.json',
   'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Amiri:wght@400;700&display=swap',
 ];
@@ -83,7 +83,7 @@ self.addEventListener('fetch', event => {
 
 // ── PUSH EVENT ──
 self.addEventListener('push', event => {
-  let data = { title: 'Салих', body: 'Напоминание', icon: '/icons/icon-192.png', badge: '/icons/icon-96.png' };
+  let data = { title: 'Салих', body: 'Напоминание', icon: '/muslimapp/icons/icon-192.png', badge: '/muslimapp/icons/icon-96.png' };
 
   if (event.data) {
     try { data = { ...data, ...event.data.json() }; }
@@ -93,11 +93,11 @@ self.addEventListener('push', event => {
   event.waitUntil(
     self.registration.showNotification(data.title, {
       body:    data.body,
-      icon:    data.icon    || '/icons/icon-192.png',
-      badge:   data.badge   || '/icons/icon-96.png',
+      icon:    data.icon    || '/muslimapp/icons/icon-192.png',
+      badge:   data.badge   || '/muslimapp/icons/icon-96.png',
       tag:     data.tag     || 'salih-notif',
       vibrate: [200, 100, 200],
-      data:    { url: data.url || '/' },
+      data:    { url: data.url || '/muslimapp/' },
       actions: data.actions || [],
     })
   );
@@ -106,7 +106,7 @@ self.addEventListener('push', event => {
 // ── NOTIFICATION CLICK ──
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const url = event.notification.data?.url || '/';
+  const url = event.notification.data?.url || '/muslimapp/';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clientList => {
