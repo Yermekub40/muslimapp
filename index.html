@@ -916,7 +916,109 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);max-w
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/adhan/4.4.3/adhan.min.js"></script>
 <script>
+// ══════════════════════════════════════════
+// ADHAN.JS — Расчёт намазов по геолокации
+// ══════════════════════════════════════════
+const ADHAN = {
+  coords: null,
+  cityName: 'Алматы',
+  method: 'UmmAlQura',
+};
+const CALC_METHODS = {
+  UmmAlQura:    { name:'Умм аль-Кура',     sub:'КСА — официальный',    fn: () => adhan.CalculationMethod.UmmAlQura() },
+  MWL:          { name:'MWL',              sub:'Мировая Исламская Лига',fn: () => adhan.CalculationMethod.MuslimWorldLeague() },
+  Egyptian:     { name:'Египетский',       sub:'Египетское управление', fn: () => adhan.CalculationMethod.Egyptian() },
+  Karachi:      { name:'Карачи',           sub:'Ун-т исламских наук',   fn: () => adhan.CalculationMethod.Karachi() },
+  NorthAmerica: { name:'ISNA',             sub:'Северная Америка',      fn: () => adhan.CalculationMethod.NorthAmerica() },
+};
+function calcPrayerTimes(lat, lng, date) {
+  date = date || new Date();
+  if (typeof adhan === 'undefined') return null;
+  try {
+    const coords = new adhan.Coordinates(lat, lng);
+    const d = adhan.DateComponents.from(date);
+    const params = (CALC_METHODS[ADHAN.method] || CALC_METHODS.UmmAlQura).fn();
+    params.highLatitudeRule = adhan.HighLatitudeRule.MiddleOfTheNight;
+    const pt = new adhan.PrayerTimes(coords, d, params);
+    return {
+      fajr:     fmtT(pt.fajr),
+      sunrise:  fmtT(pt.sunrise),
+      dhuhr:    fmtT(pt.dhuhr),
+      asr:      fmtT(pt.asr),
+      maghrib:  fmtT(pt.maghrib),
+      isha:     fmtT(pt.isha),
+      duha:     fmtT(new Date(pt.sunrise.getTime() + 20*60000)),
+      tahajjud: calcTahajjud(pt.isha, pt.fajr),
+    };
+  } catch(e) { console.error('[Adhan]', e); return null; }
+}
+function fmtT(d) {
+  if (!d) return '--:--';
+  return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
+}
+function calcTahajjud(isha, fajr) {
+  const im = isha.getTime();
+  const fm = fajr.getTime() + (fajr < isha ? 86400000 : 0);
+  return fmtT(new Date(im + Math.floor((fm - im) * 2 / 3)));
+}
+function applyTimes(times) {
+  if (!times) return;
+  const map = {fajr:0, dhuhr:1, asr:2, maghrib:3, isha:4};
+  Object.entries(map).forEach(([k,i]) => { if (times[k]) APP.prayers[i].fard = times[k]; });
+  saveApp();
+  renderPrayers();
+  renderFastPage();
+  updateKahfTimer();
+  const upd = {
+    'ec-duha': times.duha, 'ec-tahajjud': times.tahajjud,
+    'duha-t': times.duha,  'tahajjud-t': times.tahajjud,
+    's3-duha': times.duha, 's3-tahajjud': times.tahajjud,
+  };
+  Object.entries(upd).forEach(([id,val]) => { const el=document.getElementById(id); if(el&&val) el.textContent=val; });
+  setLocLabel('📍 ' + ADHAN.cityName);
+}
+function setLocLabel(txt) {
+  const el = document.getElementById('locLabel');
+  if (el) el.textContent = txt;
+}
+function getLocationAndCalc() {
+  setLocLabel('📍 Определяю...');
+  if (!navigator.geolocation) { calcForAlmaty(); return; }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      ADHAN.coords = {lat: pos.coords.latitude, lng: pos.coords.longitude};
+      localStorage.setItem('salih_coords', JSON.stringify(ADHAN.coords));
+      fetch('https://nominatim.openstreetmap.org/reverse?lat='+pos.coords.latitude+'&lon='+pos.coords.longitude+'&format=json')
+        .then(r=>r.json()).then(data => {
+          ADHAN.cityName = data.address?.city || data.address?.town || data.address?.village || 'Ваш город';
+          localStorage.setItem('salih_city', ADHAN.cityName);
+          applyTimes(calcPrayerTimes(ADHAN.coords.lat, ADHAN.coords.lng));
+        }).catch(() => applyTimes(calcPrayerTimes(ADHAN.coords.lat, ADHAN.coords.lng)));
+    },
+    () => calcForAlmaty(),
+    {timeout: 8000}
+  );
+}
+function calcForAlmaty() {
+  ADHAN.coords = {lat: 43.2567, lng: 76.9286};
+  ADHAN.cityName = 'Алматы';
+  applyTimes(calcPrayerTimes(43.2567, 76.9286));
+}
+function setAdhanMethod(methodKey) {
+  ADHAN.method = methodKey;
+  localStorage.setItem('salih_method', methodKey);
+  if (ADHAN.coords) applyTimes(calcPrayerTimes(ADHAN.coords.lat, ADHAN.coords.lng));
+}
+function scheduleDailyRecalc() {
+  const now = new Date();
+  const midnight = new Date(now.getFullYear(), now.getMonth(), now.getDate()+1, 0, 2);
+  setTimeout(() => {
+    if (ADHAN.coords) applyTimes(calcPrayerTimes(ADHAN.coords.lat, ADHAN.coords.lng));
+    scheduleDailyRecalc();
+  }, midnight - now);
+}
 // ══════════════════════════════════════════
 // SHARED STATE
 // ══════════════════════════════════════════
@@ -1024,16 +1126,31 @@ function setOffset(val,el){
   const base=APP.prayers[editIdx].fard;
   document.getElementById('edit-fard').value=fromMin(toMin(base)+val);
 }
-function getLocation(){
-  if(navigator.geolocation){navigator.geolocation.getCurrentPosition(()=>{alert('Геолокация получена — расчёт обновлён');});}
-}
-// Settings method list
-const METHODS=[{id:'umm',name:'Умм аль-Кура',sub:'КСА — официальный'},{id:'mwl',name:'MWL',sub:'Мировая лига'},{id:'isna',name:'ISNA',sub:'Северная Америка'},{id:'egypt',name:'Египетский',sub:'Египетское управление'}];
+function getLocation(){ getLocationAndCalc(); }
+// Settings method list — Adhan integrated
+const METHODS_LIST = Object.entries(CALC_METHODS).map(([k,v]) => ({key:k, name:v.name, sub:v.sub}));
 function renderMethodList(){
   const el=document.getElementById('methodList');
-  el.innerHTML=METHODS.map((m,i)=>`<div class="sheet-row" style="cursor:pointer" onclick="selectMethod(${i})"><div><div class="sheet-row-label">${m.name}</div><div class="sheet-row-sub">${m.sub}</div></div><div style="color:var(--gold);font-size:16px" id="mcheck-${i}">${i===0?'✓':''}</div></div>`).join('');
+  if(!el) return;
+  // Location row
+  const city = localStorage.getItem('salih_city') || 'Алматы';
+  el.innerHTML = `
+    <div class="sheet-row" style="cursor:pointer" onclick="getLocationAndCalc();closeSheet('settingsSheet')">
+      <div><div class="sheet-row-label">📍 Местоположение</div><div class="sheet-row-sub" id="locLabel">${city}</div></div>
+      <div style="color:var(--gold)">Обновить</div>
+    </div>
+  ` + METHODS_LIST.map((m,i) =>
+    `<div class="sheet-row" style="cursor:pointer" onclick="selectMethod(${i})">
+      <div><div class="sheet-row-label">${m.name}</div><div class="sheet-row-sub">${m.sub}</div></div>
+      <div style="color:var(--gold);font-size:16px" id="mcheck-${i}">${m.key===ADHAN.method?'✓':''}</div>
+    </div>`
+  ).join('');
 }
-function selectMethod(i){document.querySelectorAll('[id^=mcheck-]').forEach(e=>e.textContent='');document.getElementById('mcheck-'+i).textContent='✓';}
+function selectMethod(i){
+  document.querySelectorAll('[id^=mcheck-]').forEach(e=>e.textContent='');
+  document.getElementById('mcheck-'+i).textContent='✓';
+  setAdhanMethod(METHODS_LIST[i].key);
+}
 
 // ══════════════════════════════════════════
 // PAGE 2: ADHKAR
@@ -1407,6 +1524,26 @@ function init(){
   });
   // Update timers
   setInterval(()=>{renderPrayers();updateKahfTimer();},60000);
+
+  // ── ADHAN: Загрузка координат и расчёт намазов ──
+  const savedMethod = localStorage.getItem('salih_method');
+  if (savedMethod && CALC_METHODS[savedMethod]) ADHAN.method = savedMethod;
+  const savedCity = localStorage.getItem('salih_city');
+  if (savedCity) ADHAN.cityName = savedCity;
+
+  const savedCoords = localStorage.getItem('salih_coords');
+  if (savedCoords) {
+    try {
+      ADHAN.coords = JSON.parse(savedCoords);
+      // Пересчитываем по сохранённым координатам
+      const times = calcPrayerTimes(ADHAN.coords.lat, ADHAN.coords.lng);
+      applyTimes(times);
+    } catch(e) { calcForAlmaty(); }
+  } else {
+    // Первый запуск — запрашиваем геолокацию
+    getLocationAndCalc();
+  }
+  scheduleDailyRecalc();
 }
 
 init();
