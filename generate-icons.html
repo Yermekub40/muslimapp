@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Генератор иконок — Салих</title>
+<style>
+  body { font-family: sans-serif; background: #0f1a0f; color: #e8ead6; padding: 20px; max-width: 600px; margin: 0 auto; }
+  h2 { color: #c9a84c; margin-bottom: 16px; }
+  .grid { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 24px; }
+  .icon-wrap { text-align: center; }
+  .icon-wrap p { font-size: 11px; color: #6a6c5e; margin-top: 6px; }
+  .btn { display: inline-block; margin: 4px; padding: 10px 20px; background: #c9a84c; color: #0f1a0f; border: none; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; text-decoration: none; }
+  .btn:hover { background: #e8c97a; }
+  .info { background: #1e2e1e; border: 1px solid #2a3a2a; border-radius: 12px; padding: 16px; margin-bottom: 20px; font-size: 13px; line-height: 1.6; color: #a8aa96; }
+  .step { margin-bottom: 10px; }
+  .step strong { color: #c9a84c; }
+  canvas { display: none; }
+</style>
+</head>
+<body>
+<h2>🕌 Генератор иконок Салих</h2>
+
+<div class="info">
+  <div class="step"><strong>1.</strong> Нажмите "Скачать все иконки" — скачаются PNG файлы всех размеров</div>
+  <div class="step"><strong>2.</strong> Создайте папку <code>icons/</code> рядом с <code>index.html</code></div>
+  <div class="step"><strong>3.</strong> Поместите все скачанные иконки в папку <code>icons/</code></div>
+  <div class="step"><strong>4.</strong> Готово! PWA будет использовать эти иконки</div>
+</div>
+
+<div class="grid" id="iconGrid"></div>
+
+<button class="btn" onclick="downloadAll()">⬇️ Скачать все иконки</button>
+
+<canvas id="c"></canvas>
+
+<script>
+const SIZES = [72, 96, 128, 144, 152, 192, 384, 512];
+
+function drawIcon(size) {
+  const canvas = document.getElementById('c');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  // Background
+  const grad = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+  grad.addColorStop(0, '#1e3a20');
+  grad.addColorStop(1, '#0f1a0f');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, size, size, size * 0.2);
+  ctx.fill();
+
+  // Gold border
+  ctx.strokeStyle = '#c9a84c44';
+  ctx.lineWidth = size * 0.02;
+  ctx.beginPath();
+  ctx.roundRect(size*0.03, size*0.03, size*0.94, size*0.94, size * 0.18);
+  ctx.stroke();
+
+  const cx = size / 2;
+  const cy = size / 2;
+
+  // Draw crescent moon
+  const r = size * 0.28;
+  ctx.fillStyle = '#c9a84c';
+  ctx.beginPath();
+  ctx.arc(cx, cy - size*0.04, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Cut out inner circle for crescent effect
+  ctx.fillStyle = '#0f1a0f';
+  const offset = r * 0.35;
+  ctx.beginPath();
+  ctx.arc(cx + offset, cy - size*0.04 - offset*0.3, r * 0.82, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Star
+  const starX = cx + r * 0.55;
+  const starY = cy - size*0.04 - r * 0.6;
+  const starR = r * 0.18;
+  ctx.fillStyle = '#c9a84c';
+  drawStar(ctx, starX, starY, 5, starR, starR * 0.4);
+
+  // Arabic text "الله" at bottom (if size big enough)
+  if (size >= 128) {
+    ctx.font = `bold ${size * 0.15}px 'Arial', sans-serif`;
+    ctx.fillStyle = '#c9a84c99';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('الله', cx, cy + r * 1.1);
+  }
+
+  return canvas.toDataURL('image/png');
+}
+
+function drawStar(ctx, cx, cy, spikes, outerR, innerR) {
+  let rot = (Math.PI / 2) * 3;
+  const step = Math.PI / spikes;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - outerR);
+  for (let i = 0; i < spikes; i++) {
+    ctx.lineTo(cx + Math.cos(rot) * outerR, cy + Math.sin(rot) * outerR);
+    rot += step;
+    ctx.lineTo(cx + Math.cos(rot) * innerR, cy + Math.sin(rot) * innerR);
+    rot += step;
+  }
+  ctx.lineTo(cx, cy - outerR);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function renderPreviews() {
+  const grid = document.getElementById('iconGrid');
+  [72, 192, 512].forEach(size => {
+    const dataUrl = drawIcon(size);
+    const wrap = document.createElement('div');
+    wrap.className = 'icon-wrap';
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    img.width = Math.min(size, 96);
+    img.height = Math.min(size, 96);
+    img.style.borderRadius = '16px';
+    wrap.appendChild(img);
+    const p = document.createElement('p');
+    p.textContent = size + '×' + size;
+    wrap.appendChild(p);
+    grid.appendChild(wrap);
+  });
+}
+
+function downloadAll() {
+  SIZES.forEach((size, i) => {
+    setTimeout(() => {
+      const dataUrl = drawIcon(size);
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `icon-${size}.png`;
+      a.click();
+    }, i * 200);
+  });
+}
+
+renderPreviews();
+</script>
+</body>
+</html>
