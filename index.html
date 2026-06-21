@@ -916,8 +916,157 @@ body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);max-w
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/adhan/4.4.3/adhan.min.js"></script>
 <script>
+
+// ══════════════════════════════════════════
+// ВСТРОЕННЫЙ РАСЧЁТ НАМАЗОВ (без CDN)
+// Алгоритм: стандартные астрономические формулы
+// Источник: Islamic Society of North America + Umm al-Qura
+// ══════════════════════════════════════════
+const adhan = (() => {
+  const RAD = Math.PI / 180;
+  const DEG = 180 / Math.PI;
+
+  function julianDay(y, m, d) {
+    if (m <= 2) { y--; m += 12; }
+    const A = Math.floor(y / 100);
+    const B = 2 - A + Math.floor(A / 4);
+    return Math.floor(365.25 * (y + 4716)) + Math.floor(30.6001 * (m + 1)) + d + B - 1524.5;
+  }
+
+  function sunPosition(jd) {
+    const D = jd - 2451545.0;
+    const g = (357.529 + 0.98560028 * D) % 360;
+    const q = (280.459 + 0.98564736 * D) % 360;
+    const L = (q + 1.915 * Math.sin(g * RAD) + 0.020 * Math.sin(2 * g * RAD)) % 360;
+    const e = 23.439 - 0.00000036 * D;
+    const RA = Math.atan2(Math.cos(e * RAD) * Math.sin(L * RAD), Math.cos(L * RAD)) * DEG / 15;
+    const dec = Math.asin(Math.sin(e * RAD) * Math.sin(L * RAD)) * DEG;
+    const EqT = q / 15 - ((RA + 360) % 24);
+    return { dec, EqT };
+  }
+
+  function hourAngle(lat, dec, angle) {
+    const num = Math.cos(angle * RAD) - Math.sin(lat * RAD) * Math.sin(dec * RAD);
+    const den = Math.cos(lat * RAD) * Math.cos(dec * RAD);
+    const val = num / den;
+    if (Math.abs(val) > 1) return null;
+    return Math.acos(val) * DEG;
+  }
+
+  function asrAngle(lat, dec, shadow) {
+    const target = Math.atan(1 / (shadow + Math.tan(Math.abs(lat - dec) * RAD))) * DEG;
+    return hourAngle(lat, dec, 90 - target);
+  }
+
+  function toTime(ut, lng) {
+    // ut = UT decimal hours, lng = longitude
+    let t = ut - lng / 15;
+    t = ((t % 24) + 24) % 24;
+    const h = Math.floor(t);
+    const m = Math.round((t - h) * 60);
+    if (m === 60) return { h: h + 1, m: 0 };
+    return { h, m };
+  }
+
+  function fmt(obj) {
+    if (!obj) return '--:--';
+    const h = String(obj.h % 24).padStart(2,'0');
+    const m = String(obj.m).padStart(2,'0');
+    return h + ':' + m;
+  }
+
+  // Method params: [fajrAngle, ishaAngle or ishaMinutes, ishaIsMinutes]
+  const METHODS = {
+    UmmAlQura:    { fajr: 18.5, isha: 90,  ishaMin: true  },
+    MWL:          { fajr: 18,   isha: 17,  ishaMin: false },
+    Egyptian:     { fajr: 19.5, isha: 17.5,ishaMin: false },
+    Karachi:      { fajr: 18,   isha: 18,  ishaMin: false },
+    NorthAmerica: { fajr: 15,   isha: 15,  ishaMin: false },
+  };
+
+  return {
+    Coordinates: function(lat, lng) { return {lat, lng}; },
+    DateComponents: { from: d => d },
+    HighLatitudeRule: { MiddleOfTheNight: 'middle' },
+    CalculationMethod: Object.fromEntries(
+      Object.entries(METHODS).map(([k,v]) => [k, () => ({...v, key: k})])
+    ),
+    PrayerTimes: function(coords, date, params) {
+      const { lat, lng } = coords;
+      const d = date instanceof Date ? date : new Date();
+      const jd = julianDay(d.getFullYear(), d.getMonth() + 1, d.getDate());
+      const { dec, EqT } = sunPosition(jd);
+
+      const method = params.key ? METHODS[params.key] : params;
+      const fajrAngle  = method.fajr  || 18;
+      const ishaAngle  = method.isha  || 17;
+      const ishaIsMin  = method.ishaMin || false;
+
+      // Solar noon (Zawal)
+      const zawal = 12 + lng / 15 - EqT;
+
+      // Sunrise / Sunset
+      const haRise = hourAngle(lat, dec, 90.833);
+      const sunrise = haRise !== null ? zawal - haRise / 15 : null;
+      const sunset  = haRise !== null ? zawal + haRise / 15 : null;
+
+      // Fajr
+      const haFajr = hourAngle(lat, dec, fajrAngle);
+      const fajr = haFajr !== null ? zawal - haFajr / 15 : null;
+
+      // Asr (Shafi = shadow 1x, Hanafi = shadow 2x) — using 1x
+      const haAsr = asrAngle(lat, dec, 1);
+      const asr = haAsr !== null ? zawal + haAsr / 15 : null;
+
+      // Maghrib = Sunset
+      const maghrib = sunset;
+
+      // Isha
+      let isha;
+      if (ishaIsMin) {
+        isha = sunset !== null ? sunset + ishaAngle / 60 : null;
+      } else {
+        const haIsha = hourAngle(lat, dec, ishaAngle);
+        isha = haIsha !== null ? zawal + haIsha / 15 : null;
+      }
+
+      // Convert to Date objects (for compatibility)
+      function toDate(ut) {
+        if (ut === null) return null;
+        const t = toTime(ut, 0); // UTC
+        const r = new Date(d);
+        r.setUTCHours(t.h, t.m, 0, 0);
+        return r;
+      }
+
+      // Need to convert from UT to local — use timezone offset
+      const tzOffset = d.getTimezoneOffset() / -60;
+
+      function toLocalDate(utDecimal) {
+        if (utDecimal === null) return null;
+        let local = utDecimal + tzOffset;
+        local = ((local % 24) + 24) % 24;
+        const h = Math.floor(local);
+        const m = Math.round((local - h) * 60);
+        const result = new Date(d);
+        result.setHours(m === 60 ? h + 1 : h, m === 60 ? 0 : m, 0, 0);
+        return result;
+      }
+
+      return {
+        fajr:    toLocalDate(fajr),
+        sunrise: toLocalDate(sunrise),
+        dhuhr:   toLocalDate(zawal),
+        asr:     toLocalDate(asr),
+        maghrib: toLocalDate(maghrib),
+        isha:    toLocalDate(isha),
+      };
+    }
+  };
+})();
+
+
 // ══════════════════════════════════════════
 // ADHAN.JS — Расчёт намазов по геолокации
 // ══════════════════════════════════════════
