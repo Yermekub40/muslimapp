@@ -1033,15 +1033,20 @@ const adhan = (() => {
         }
       }
 
-      // Convert UT to local Date using actual timezone offset
-      const tzOffsetHours = -d.getTimezoneOffset() / 60;
+      // Convert UT decimal hours → Date object
+      // setUTCHours sets UTC time, then getHours() auto-converts to local timezone
       const base = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
 
       const conv = (ut) => {
         if (ut === null) return null;
-        // ut is already in UT, convert to local
-        const localHours = ut + tzOffsetHours;
-        return toDate(base, localHours);
+        // ut is in UT — set as UTC, JS will auto-convert to local on getHours()
+        const utNorm = ((ut % 24) + 24) % 24;
+        const h = Math.floor(utNorm);
+        const m = Math.round((utNorm - h) * 60);
+        const result = new Date(base);
+        if (m === 60) result.setUTCHours(h + 1, 0, 0, 0);
+        else result.setUTCHours(h, m, 0, 0);
+        return result;
       };
 
       return {
