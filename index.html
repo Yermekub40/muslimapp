@@ -1071,13 +1071,12 @@ const CALC_METHODS = {
 };
 function calcPrayerTimes(lat, lng, date) {
   date = date || new Date();
-  if (typeof adhan === 'undefined') return null;
   try {
-    const coords = new adhan.Coordinates(lat, lng);
-    const d = adhan.DateComponents.from(date);
+    // Используем встроенный adhan объект (не конструктор)
+    const coords = adhan.Coordinates(lat, lng);
     const params = (CALC_METHODS[ADHAN.method] || CALC_METHODS.UmmAlQura).fn();
-    params.highLatitudeRule = adhan.HighLatitudeRule.MiddleOfTheNight;
-    const pt = new adhan.PrayerTimes(coords, d, params);
+    const pt = adhan.PrayerTimes(coords, date, params);
+    if (!pt) return null;
     return {
       fajr:     fmtT(pt.fajr),
       sunrise:  fmtT(pt.sunrise),
@@ -1085,8 +1084,8 @@ function calcPrayerTimes(lat, lng, date) {
       asr:      fmtT(pt.asr),
       maghrib:  fmtT(pt.maghrib),
       isha:     fmtT(pt.isha),
-      duha:     fmtT(new Date(pt.sunrise.getTime() + 20*60000)),
-      tahajjud: calcTahajjud(pt.isha, pt.fajr),
+      duha:     pt.sunrise ? fmtT(new Date(pt.sunrise.getTime() + 20*60000)) : null,
+      tahajjud: pt.isha && pt.fajr ? calcTahajjud(pt.isha, pt.fajr) : null,
     };
   } catch(e) { console.error('[Adhan]', e); return null; }
 }

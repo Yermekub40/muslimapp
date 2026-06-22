@@ -3,7 +3,7 @@
 // Офлайн кэш + Push уведомления
 // ═══════════════════════════════════════════
 
-const CACHE_NAME = 'salih-v1';
+const CACHE_NAME = 'salih-v3';
 const OFFLINE_URL = '/muslimapp/';
 
 // Файлы для кэширования при установке
